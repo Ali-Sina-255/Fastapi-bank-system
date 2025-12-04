@@ -44,7 +44,7 @@ network-inspect:
 
 
 banker-db:
-	docker compose -f local.yml exec postgres psql --username=alisultani --dbname=banker
+	docker compose -f local.yml exec postgres psql --username=ALI --dbname=nextgen
 
 flake8:
 	docker compose -f local.yml exec api flake8 .
