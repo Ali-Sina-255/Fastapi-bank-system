@@ -9,15 +9,15 @@ services:
     volumes:
       - nextgen_local_db:/var/lib/postgresql/data
 
-    enf_file:
-      - ./.envs/.env/.env.local
+    env_file:
+      - .envs/.env.local
 
     networks:
-      - nextget_local_nw
+      - nextgen_local_nw
 
 networks:
-  nextget_local_nw:
-  external: true
+  nextgen_local_nw:
+    external: true
 
 volumes:
   nextgen_local_db:
