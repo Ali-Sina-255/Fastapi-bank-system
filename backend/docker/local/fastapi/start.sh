@@ -1,9 +1,8 @@
 #!/bin/bash
-
-set -o  errexit
-
+set -o errexit
+set -o pipefail
 set -o nounset
 
-set -o pipefail
-
-exec unicorn backend.app.main:app --host 0.0.0.0 8000 --reload
+python manage.py migrate --no-input
+python manage.py collectstatic  --no-input 
+exec python manage.py runserver 0.0.0.0:8000

@@ -1,0 +1,4 @@
+.git
+*.pyc
+*.pyo
+__pychache__/
