@@ -33,7 +33,7 @@ class Setting(BaseSettings):
     MAILPIT_UI_PORT: int = 8025
 
     REDIS_HOST: str = "redis"
-    REDIS_PORT: str = 6379
+    REDIS_PORT: int = 6379
     REDIS_DB: int = 0
 
     RABBITMQ_HOST: str = "rabbitmq"

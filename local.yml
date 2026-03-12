@@ -7,11 +7,13 @@ services:
       - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - ./backend/docker/local/traefik/local.yml:/etc/traefik/traefik.yml
+      # Mount the existing static config file into Traefik's default location
+      - ./backend/docker/local/traefik/traefik.yaml:/etc/traefik/traefik.yml:ro
+      # If you want dynamic configs, mount them to a different directory
+      - ./backend/docker/local/traefik/dynamic:/etc/traefik/dynamic:ro
     networks:
       - nextgen_local_nw
-    command:
-      - --providers.docker
+    # Remove any command line args since they're in the config file
 
   api:
     build:
@@ -20,8 +22,7 @@ services:
     volumes:
       - .:/src
       - ./backend/app/logs:/src/backend/app/log
-    ports:
-      - "8000:8000"
+    # Remove ports: "8000:8000" - Traefik will handle routing
     env_file:
       - .envs/.env.local
     depends_on:
@@ -33,8 +34,10 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.entrypoints=web"
-      - "traefik.http.routers.api.service=api-service"
-      - "traefik.http.services.api-service.loadbalancer.server.port=8000"
+      - "traefik.http.routers.api.rule=PathPrefix(`/`)"
+      - "traefik.http.services.api.loadbalancer.server.port=8000"
+
+  # ... rest of your services remain the same
 
   mailpit:
     image: docker.io/axllent/mailpit:v1.20.3

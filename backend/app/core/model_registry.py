@@ -20,7 +20,7 @@ def discover_models() -> list[str]:
             continue
 
         if "models.py" in files:
-            # ✅ FIXED HERE
+
             rel_path = os.path.relpath(root, root_path)
             modules_path = rel_path.replace(os.path.sep, ".")
 

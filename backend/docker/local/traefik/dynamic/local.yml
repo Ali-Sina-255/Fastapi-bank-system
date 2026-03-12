@@ -1,0 +1,22 @@
+# Dynamic configuration
+http:
+  middlewares:
+    retry:
+      retry:
+        attempts: 3
+        initialInterval: "500ms"
+
+  services:
+    api-service:
+      loadBalancer:
+        servers:
+          - url: "http://api:8000"
+
+  routers:
+    api:
+      entryPoints:
+        - web
+      rule: "PathPrefix(`/api`) || PathPrefix(`/docs`)"
+      service: api-service
+      middlewares:
+        - retry

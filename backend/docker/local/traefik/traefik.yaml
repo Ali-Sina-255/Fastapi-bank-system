@@ -1,3 +1,10 @@
+# Static configuration
+entryPoints:
+  web:
+    address: ":80"
+  traefik:
+    address: ":8080"
+
 api:
   dashboard: true
   insecure: true
@@ -10,18 +17,12 @@ accessLog:
   format: json
   filePath: /var/log/traefik/access.log
 
-middlewares:
-  retry:
-    retry:
-      attempts: 3
-      initialInterval: "500ms"
-
 providers:
   docker:
-    endpoint: "unix://var/run/docker.sock"
+    endpoint: "unix:///var/run/docker.sock"
     watch: true
     exposedByDefault: false
     network: nextgen_local_nw
-entryPoint:
-  web:
-    address: ":80"
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
