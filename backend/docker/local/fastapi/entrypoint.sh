@@ -31,7 +31,8 @@ def check_database():
             port="${POSTGRES_PORT}",
         )
         return True
-    except psycopg2.OperationalError as error:
+
+    except psycopg.OperationalError as error:
         elapsed = int(time.time() - start_time())
         sys.stderr.write("Database connection attempt failed after {elapsed} second:{error}\n")  
         return False

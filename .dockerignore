@@ -2,3 +2,8 @@
 *.pyc
 *.pyo
 __pychache__/
+.vscode
+venv/
+.venv
+*.log
+.envs/*

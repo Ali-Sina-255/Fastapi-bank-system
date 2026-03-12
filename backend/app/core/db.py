@@ -3,8 +3,9 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.config import settings
-from app.core.logging import get_logger
+from backend.app.core.config import settings
+from backend.app.core.logging import get_logger
+from backend.app.core.model_registry import load_models
 
 logger = get_logger()
 
@@ -26,4 +27,9 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    pass
+    try:
+        load_models()
+        logger.info("Models loaded successfully")
+
+    except ImportError:
+        logger.info("Models was not loaded successfully : {e}")
