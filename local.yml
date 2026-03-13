@@ -7,27 +7,25 @@ services:
       - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      # Mount the existing static config file into Traefik's default location
       - ./backend/docker/local/traefik/traefik.yaml:/etc/traefik/traefik.yml:ro
-      # If you want dynamic configs, mount them to a different directory
       - ./backend/docker/local/traefik/dynamic:/etc/traefik/dynamic:ro
     networks:
       - nextgen_local_nw
-    # Remove any command line args since they're in the config file
 
-  api:
+  api: &api
     build:
       context: .
       dockerfile: ./backend/docker/local/fastapi/Dockerfile
     volumes:
       - .:/src
       - ./backend/app/logs:/src/backend/app/log
-    # Remove ports: "8000:8000" - Traefik will handle routing
     env_file:
       - .envs/.env.local
     depends_on:
       - postgres
       - mailpit
+      - redis
+      - rabbitmq
     command: /start.sh
     networks:
       - nextgen_local_nw
@@ -36,8 +34,6 @@ services:
       - "traefik.http.routers.api.entrypoints=web"
       - "traefik.http.routers.api.rule=PathPrefix(`/`)"
       - "traefik.http.services.api.loadbalancer.server.port=8000"
-
-  # ... rest of your services remain the same
 
   mailpit:
     image: docker.io/axllent/mailpit:v1.20.3
@@ -67,6 +63,75 @@ services:
     networks:
       - nextgen_local_nw
 
+  redis:
+    image: docker.io/redis:7.0-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - nextgen_redis_data:/data
+    networks:
+      - nextgen_local_nw
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: docker.io/rabbitmq:3.13-management
+    ports:
+      - '15672:15672'
+      - '5672:5672'
+    volumes:
+      - nextgen_rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - nextgen_local_nw
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.entrypoints=web"
+      - "traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.localhost`)"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  celeryworker:
+    <<: *api
+    ports: []
+    command: /start-celeryworker.sh
+    depends_on:
+      - redis
+      - rabbitmq
+    labels:
+      - "traefik.enable=false"
+
+  flower:
+    <<: *api
+    ports:
+      - '5555:5555'
+    volumes:
+      - nextgen_flower_data:/data
+    command: /start-flower.sh
+    depends_on:
+      - redis
+      - rabbitmq
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flower.entrypoints=web"
+      - "traefik.http.routers.flower.rule=Host(`flower.localhost`)"
+      - "traefik.http.services.flower.loadbalancer.server.port=5555"
+
+  celerybeat:
+    <<: *api
+    ports: []
+    command: /start-celerybeat.sh  # Make sure this file exists
+    depends_on:
+      - redis
+      - rabbitmq
+    labels:
+      - "traefik.enable=false"
+
 networks:
   nextgen_local_nw:
     external: true
@@ -74,3 +139,6 @@ networks:
 volumes:
   nextgen_local_db:
   nextgen_mailpit_data:
+  nextgen_flower_data:
+  nextgen_rabbitmq_data:
+  nextgen_redis_data:
