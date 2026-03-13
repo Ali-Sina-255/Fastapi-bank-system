@@ -25,7 +25,7 @@ class Setting(BaseSettings):
     POSTGRES_HOST: str
     POSTGRES_PORT: int
     POSTGRES_DB: str
-
+    # email settings
     MAIL_FROM: str = ""
     MAIL_FROM_NAME: str = ""
     SMTP_HOST: str = ""
@@ -35,7 +35,7 @@ class Setting(BaseSettings):
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-
+    
     RABBITMQ_HOST: str = "rabbitmq"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
