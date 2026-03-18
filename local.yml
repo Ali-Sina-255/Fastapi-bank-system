@@ -79,8 +79,8 @@ services:
   rabbitmq:
     image: docker.io/rabbitmq:3.13-management
     ports:
-      - '15672:15672'
-      - '5672:5672'
+      - "15672:15672"
+      - "5672:5672"
     volumes:
       - nextgen_rabbitmq_data:/var/lib/rabbitmq
     networks:
@@ -109,7 +109,7 @@ services:
   flower:
     <<: *api
     ports:
-      - '5555:5555'
+      - "5555:5555"
     volumes:
       - nextgen_flower_data:/data
     command: /start-flower.sh
@@ -125,7 +125,7 @@ services:
   celerybeat:
     <<: *api
     ports: []
-    command: /start-celerybeat.sh  # Make sure this file exists
+    command: /start-celerybeat.sh
     depends_on:
       - redis
       - rabbitmq
