@@ -71,7 +71,7 @@ class HealthCheck:
                 f"Service '{service_name}' is registered with dependencies: {depends_on}"
             )
 
-    async def check_databases(self) -> bool:
+    async def check_database(self) -> bool:
         try:
             # TODO: load modes
             # TODO: add logger info
