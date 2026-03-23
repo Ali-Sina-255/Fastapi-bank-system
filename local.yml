@@ -34,6 +34,10 @@ services:
       - "traefik.http.routers.api.entrypoints=web"
       - "traefik.http.routers.api.rule=PathPrefix(`/`)"
       - "traefik.http.services.api.loadbalancer.server.port=8000"
+      - "traefik.http.routers.api.loadbalancer.health.path=/health"
+      - "traefik.http.routers.api.loadbalancer.health.interval=30s"
+      - "traefik.http.routers.api.loadbalancer.health.timeout=10s"
+      - "traefik.http.routers.api.loadbalancer.health.retries=3"  
 
   mailpit:
     image: docker.io/axllent/mailpit:v1.20.3
