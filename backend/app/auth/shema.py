@@ -33,6 +33,7 @@ class RoleChoicesSchema(str, Enum):
     CUSTOMER = "Customer"
     ACCOUNT_EXECUTIVE = "Account_executive"
     BRANCH_MANAGER = "Branch_manager"
+    ADMIN = "Admin"
     SUPER_ADMIN = "Super_admin"
     TELLER = "Teller"
 
@@ -59,11 +60,11 @@ class UserCreateSchema(BaseUserSchema):
     confirm_password: str = Field(min_length=8, max_length=40)
 
     @field_validator("confirm_password")
-    def validated_confirm_password(cls, v, values):
+    def validate_confirm_password(cls, v, values):
         if "password" in values.data and v != values.data["password"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                details={
+                detail={
                     "status": "error",
                     "message": "Password do not match",
                     "action": "Please ensure that the password you entered match",

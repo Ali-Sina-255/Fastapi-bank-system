@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from pydantic import computed_field
 from sqlalchemy.dialects import postgresql as pg
-from sqlclchemy import func, text
+from sqlalchemy import func, text
 from sqlmodel import Column, Field
 
 from backend.app.auth.shema import BaseUserSchema, RoleChoicesSchema
@@ -11,22 +11,27 @@ from backend.app.auth.shema import BaseUserSchema, RoleChoicesSchema
 
 class User(BaseUserSchema, table=True):
     id: uuid.UUID = Field(
-        as_column=Column(pg.UUID(as_uuid=True, primary_key=True)),
         default_factory=uuid.uuid4,
+        sa_column=Column(pg.UUID(as_uuid=True), primary_key=True),
     )
+
     hashed_password: str
-    failed_login_attempts: int = Field(default=0, as_type=pg.SMALLINT)
+
+    failed_login_attempts: int = Field(default=0, sa_column=Column(pg.SMALLINT))
+
     last_failed_login: datetime | None = Field(
-        default=None, as_column=Column(pg.TIMESTAMP(timezone=True))
+        default=None, sa_column=Column(pg.TIMESTAMP(timezone=True))
     )
-    otp: str = Field(max_length=6, default="")
+
+    otp: str = Field(default="", sa_column=Column(pg.VARCHAR(6)))
+
     otp_expiry_time: datetime | None = Field(
-        default=None, as_column=Column(pg.TIMESTAMP(timezone=True))
+        default=None, sa_column=Column(pg.TIMESTAMP(timezone=True))
     )
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        as_column=Column(
+        sa_column=Column(
             pg.TIMESTAMP(timezone=True),
             nullable=False,
             server_default=text("CURRENT_TIMESTAMP"),
@@ -35,18 +40,19 @@ class User(BaseUserSchema, table=True):
 
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        as_column=Column(
+        sa_column=Column(
             pg.TIMESTAMP(timezone=True),
             nullable=False,
-            onupdate=func.current_timestamp(),
+            server_default=text("CURRENT_TIMESTAMP"),
+            onupdate=func.now(),
         ),
     )
 
     @computed_field
     @property
-    def full_name(self) -> None:
-        full_name = f"{self.first_name} {self.middle_name + ' ' if self.middle_name else ''} {self.last_name}"
-        return full_name.title().strip()
+    def full_name(self) -> str:
+        parts = [self.first_name, self.middle_name, self.last_name]
+        return " ".join(filter(None, parts)).title()
 
     def has_role(self, role: RoleChoicesSchema) -> bool:
-        return self.role.value == role.value
+        return self.role == role

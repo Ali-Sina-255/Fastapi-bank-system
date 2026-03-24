@@ -24,14 +24,14 @@ async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncS
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    session  = async_session()
+    session = async_session()
     try:
         yield session
     except Exception as e:
         logger.error(f"Database session Error: {e}")
         if session:
             try:
-                
+
                 await session.rollback()
                 logger.info("Database session rolled back successfully")
             except Exception as rollback_error:
@@ -40,17 +40,20 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     finally:
         if session:
             try:
-                
+
                 await session.close()
                 logger.info("Database session closed successfully")
             except Exception as close_error:
                 logger.error(f"Database session close Error: {close_error}")
-                
+
+
 async def init_db() -> None:
     try:
-        max_retries  = 3
-        retry_delay =2
-        for     attempt in range(max_retries):
+        load_models()
+        logger.info("Models loaded successfully...")
+        max_retries = 3
+        retry_delay = 2
+        for attempt in range(max_retries):
             try:
                 async with engine.begin() as conn:
                     await conn.execute("SELECT 1")
@@ -60,10 +63,12 @@ async def init_db() -> None:
                 if attempt == max_retries - 1:
                     logger.error("Database connection failed after multiple attempts.")
                     raise
-                logger.warning(f"Database connection failed. Retrying in {retry_delay} seconds...")
-                 
+                logger.warning(
+                    f"Database connection failed. Retrying in {retry_delay} seconds..."
+                )
+
                 await asyncio.sleep(retry_delay * (attempt + 1))
-        load_models()
+
         logger.info("Models loaded successfully")
 
     except Exception as e:

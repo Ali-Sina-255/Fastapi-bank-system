@@ -35,11 +35,14 @@ class Setting(BaseSettings):
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-    
+
     RABBITMQ_HOST: str = "rabbitmq"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
     RABBITMQ_PASSWORD: str = "password"
+    OTP_EXPIRATION_MINUTES: int = 2 if ENVIRONMENT == "local" else 5
+    LOGIN_ATTEMPTS: int = 3
+    LOCKOUT_DURATION_MINUTES: int = 5 if ENVIRONMENT == "local" else 5
 
     @property
     def DATABASE_URL(self) -> str:
