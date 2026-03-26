@@ -13,7 +13,7 @@ down-v:
 nextgen-config:
 	docker compose -f local.yml config
 
-migrations:
+makemigrations:
 	docker compose -f local.yml exec -it api alembic revision --autogenerate  -m  "$(name)"
 
 migrate:
@@ -35,5 +35,5 @@ network-inspect:
 	docker network inspect nextgen_local_nw
 
 psql: 
-	docker compose -f local.yml exec -it postgres psql -U aliSultani -d nextgen
+	docker compose -f local.yml exec -it postgres psql -U ALI -d nextgen
 
