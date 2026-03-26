@@ -51,14 +51,23 @@ class Setting(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     LOGIN_ATTEMPTS: int = 3
-
+    
+    API_BASE_URL:str = ''
+    SUPPORT_EMAIL:str = ''
+    JWT_SECRET_KEY:str = ''
+    JWT_ALGORITHM :str = 'HS256'
+    
     @property
     def OTP_EXPIRATION_MINUTES(self) -> int:
         return 2 if self.ENVIRONMENT == "local" else 5
 
     @property
     def LOCKOUT_DURATION_MINUTES(self) -> int:
-        return 5 if self.ENVIRONMENT == "local" else 15
+        return 5 if self.ENVIRONMENT == "local" else 5
+
+    @property
+    def ACTIVATION_TOKEN_EXPIRATION_MINUTES(self) -> int:
+        return 5 if self.ENVIRONMENT == "local" else 5
 
     @property
     def DATABASE_URL(self) -> str:

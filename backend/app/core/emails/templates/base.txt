@@ -1,0 +1,12 @@
+{% block header %}{% endblock header %}
+{% block content %}{% endblock content %}
+
+{% block footer %}
+        
+          If you have any questions, please contact us at
+          <a href="mailto:{{support_email}}"> {{support_email}}</a>
+        
+          Thanks for using our services! &copy;{{site_name}} Team. All right
+          reserved.
+       
+{% endblock footer %}

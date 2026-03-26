@@ -1,6 +1,9 @@
 import random
 import string
+import uuid
+from datetime import datetime, timedelta, timezone
 
+import iwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
 
@@ -32,7 +35,19 @@ def generate_username() -> str:
     remainder_length = max(4, 12 - len(prefix) - 1)
 
     random_string = "".join(
-        random.choices(string.ascii_uppercase + settings.digits, k=remainder_length) # type: ignore
+        random.choices(string.ascii_uppercase + settings.digits, k=remainder_length)  # type: ignore
     )
 
     return f"{prefix}-{random_string}"
+
+
+def generate_activation_token(id: uuid.UUID) -> str:
+    payload = {
+        "id": str(id),
+        "type": "activation",
+        "exp": datetime.now(timezone.utc)
+        + timedelta(minutes=settings.ACTIVATION_TOKEN_EXPIRATION_MINUTES),
+    }
+    return iwt.encode(
+        payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
+    )

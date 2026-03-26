@@ -24,7 +24,7 @@ def send_email_task(
     try:
         message = MessageSchema(
             subject=subject,
-            recipients=recipients,
+            recipients=recipients, # type: ignore
             body=html_content,
             subtype=MessageType.html,
             alternative_body=plain_content,

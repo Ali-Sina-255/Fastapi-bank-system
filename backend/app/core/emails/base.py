@@ -27,7 +27,7 @@ class EmailTemplate:
 
             plain_content = plain_template.render(**context)
 
-            task =  send_email_task.delay(
+            task =  send_email_task.delay( # type: ignore
                 recipients = recipients_list,
                 subject=subject_override or cls.subject,
                 html_content=html_content,
@@ -36,4 +36,4 @@ class EmailTemplate:
 
             logger.info(f"Email task {task.id} queued for {recipients_list} with subject '{subject_override or cls.subject}'")
         except  Exception as e:
-            logger.error(f"Failed to queue email task for {recipients_list}: Error:{str(e)}")
+            logger.error(f"Failed to queue email task for {recipients_list}: Error:{str(e)}") # type: ignore
