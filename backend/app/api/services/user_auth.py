@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from backend.app.core.services.login_otp import send_login_otp_email
+from backend.app.core.services.login_otp import send_login_otp_email # type: ignore
 from fastapi import HTTPException, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
