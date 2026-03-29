@@ -16,58 +16,39 @@ db_dependency = Annotated[AsyncSession, Depends(get_session)]
 
 
 @router.post(
-    "/register", response_model=UserReadSchema, status_code=status.HTTP_201_CREATED
+    "/register",
+    response_model=UserReadSchema,
+    status_code=status.HTTP_201_CREATED,
 )
 async def register_user(
-    user_data: UserCreateSchema,
-    db: db_dependency,
-) -> UserReadSchema:
+    user_data: UserCreateSchema, session: db_dependency
+):
     try:
-        # Check if email exists - Fixed parameter order
-        existing_email = await user_auth_service.get_user_by_email(
-            email=user_data.email, db=db
-        )
-        if existing_email:
+        if await user_auth_service.check_user_email_exists(user_data.email, session):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "status": "error",
-                    "message": "Email already registered",
-                    "action": "Please use a different email address",
-                },
+                detail="User with this email already exists",
             )
 
-     
-        existing_id = await user_auth_service.check_user_id_no_exists(
-            id_no=user_data.id_no, db=db  
-        )
-        if existing_id:
+        if await user_auth_service.check_user_id_no_exists(user_data.id_no, session):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "status": "error",
-                    "message": "ID number already taken",
-                    "action": "Please choose a different ID number",
-                },
+                detail="User with this id number already exists",
             )
 
-      
-        new_user = await user_auth_service.create_user(user_data=user_data, db=db)
-
-        logger.info(f"User registered successfully: {new_user.email}")
+        new_user = await user_auth_service.create_user(user_data, session)
+        logger.info(
+            f"New user {new_user.email} registered successfully, awaiting activation"
+        )
         return new_user
 
     except HTTPException as http_ex:
-        await db.rollback()
+        await session.rollback()
         raise http_ex
     except Exception as e:
-        await db.rollback()
-        logger.error(f"Error registering user: {e}")
+        await session.rollback()
+        logger.error(f"Failed to register user: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "status": "error",
-                "message": "An error occurred while registering the user",
-                "action": "Please try again later",
-            },
+            detail="Internal server error",
         )

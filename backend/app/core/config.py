@@ -15,60 +15,102 @@ class Setting(BaseSettings):
         env_ignore_empty=True,
         extra="ignore",
     )
+
+    # =========================================
+    # 🌐 Project
+    # =========================================
     API_V1_STR: str = ""
     PROJECT_NAME: str = ""
     PROJECT_DESCRIPTION: str = ""
     SITE_NAME: str = ""
 
-    # Database
+    # =========================================
+    # 🐘 Database
+    # =========================================
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_HOST: str
     POSTGRES_PORT: int
     POSTGRES_DB: str
 
-    # Email
+    # =========================================
+    # 📧 Email (SMTP)
+    # =========================================
     EMAIL_FROM: str = ""
     EMAIL_FROM_NAME: str = ""
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 1025
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
+    SUPPORT_EMAIL: str = ""
 
-    # Redis
+    SMTP_HOST: str
+    SMTP_PORT: int = 1025
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+
+    EMAIL_USE_TLS: bool = False
+    EMAIL_USE_SSL: bool = False
+
+    # =========================================
+    # 🔴 Redis
+    # =========================================
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
 
-    # RabbitMQ
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
+    # =========================================
+    # 🐇 RabbitMQ
+    # =========================================
     RABBITMQ_HOST: str = "rabbitmq"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
-    RABBITMQ_PASSWORD: str = "password"
+    RABBITMQ_PASSWORD: str = "guest"
 
-    # Security
+    @property
+    def CELERY_BROKER_URL(self) -> str:
+        return (
+            f"amqp://{self.RABBITMQ_USER}:{self.RABBITMQ_PASSWORD}"
+            f"@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}//"
+        )
+
+    @property
+    def CELERY_RESULT_BACKEND(self) -> str:
+        return self.REDIS_URL
+
+    # =========================================
+    # 🔐 Security
+    # =========================================
     SECRET_KEY: str
-    ALGORITHM: str = "HS256"
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     LOGIN_ATTEMPTS: int = 3
-    
-    API_BASE_URL:str = ''
-    SUPPORT_EMAIL:str = ''
-    JWT_SECRET_KEY:str = ''
-    JWT_ALGORITHM :str = 'HS256'
-    
+
+    # =========================================
+    # 🌍 API
+    # =========================================
+    API_BASE_URL: str = ""
+
+    # =========================================
+    # ⏱️ Dynamic Settings
+    # =========================================
     @property
     def OTP_EXPIRATION_MINUTES(self) -> int:
         return 2 if self.ENVIRONMENT == "local" else 5
 
     @property
     def LOCKOUT_DURATION_MINUTES(self) -> int:
-        return 5 if self.ENVIRONMENT == "local" else 5
+        return 5
 
     @property
     def ACTIVATION_TOKEN_EXPIRATION_MINUTES(self) -> int:
-        return 5 if self.ENVIRONMENT == "local" else 5
+        return 5
 
+    # =========================================
+    # 🐘 DATABASE URL
+    # =========================================
     @property
     def DATABASE_URL(self) -> str:
         return (
@@ -79,4 +121,4 @@ class Setting(BaseSettings):
         )
 
 
-settings = Setting()  # type: ignore
+settings = Setting()

@@ -19,20 +19,20 @@ logger = get_logger()
     retry_backoff_max=60,
 )
 def send_email_task(
-    self, recipients: list[str], subject: str, html_content: str, plain_content: str
+    self, *, recipients: list[str], subject: str, html_content: str, plain_content: str
 ) -> bool:
     try:
         message = MessageSchema(
             subject=subject,
-            recipients=recipients,  # type: ignore
+            recipients=recipients,
             body=html_content,
             subtype=MessageType.html,
             alternative_body=plain_content,
             multipart_subtype=MultipartSubtypeEnum.alternative,
         )
         asyncio.run(fast_mail.send_message(message))
-        logger.info(f"Email sent successfully to {recipients}")
+        logger.info(f"Email successfully sent to {recipients} with subject {subject}")
         return True
     except Exception as e:
-        logger.error(f"Failed to send email to {recipients}: {str(e)}")
+        logger.error(f"Failed to send email to {recipients}: Error: {str(e)}")
         return False

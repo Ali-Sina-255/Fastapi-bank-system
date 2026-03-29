@@ -3,7 +3,7 @@ import string
 import uuid
 from datetime import datetime, timedelta, timezone
 
-import iwt
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
 
@@ -30,24 +30,25 @@ def verify_password(password: str, hashed_password: str) -> bool:
 def generate_username() -> str:
     bank_name = settings.SITE_NAME
     words = bank_name.split()
-    prefix = "".join(word[0] for word in words).upper()
-
-    remainder_length = max(4, 12 - len(prefix) - 1)
-
+    prefix = "".join([word[0] for word in words]).upper()
+    remaining_length = 12 - len(prefix) - 1
     random_string = "".join(
-        random.choices(string.ascii_uppercase + settings.digits, k=remainder_length)  # type: ignore
+        random.choices(string.ascii_uppercase + string.digits, k=remaining_length)
     )
+    username = f"{prefix}-{random_string}"
 
-    return f"{prefix}-{random_string}"
+    return username
 
 
-def generate_activation_token(id: uuid.UUID) -> str:
+def create_activation_token(id: uuid.UUID) -> str:
     payload = {
         "id": str(id),
         "type": "activation",
         "exp": datetime.now(timezone.utc)
         + timedelta(minutes=settings.ACTIVATION_TOKEN_EXPIRATION_MINUTES),
+        "iat": datetime.now(timezone.utc),
     }
-    return iwt.encode(
+    return jwt.encode(
         payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
     )
+

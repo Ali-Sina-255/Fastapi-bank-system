@@ -6,103 +6,97 @@ from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 
 from backend.app.api.main import api_router
-from backend.app.core import logging
 from backend.app.core.config import settings
 from backend.app.core.db import engine, init_db
 from backend.app.core.health import ServiceStatus, health_checker
+from backend.app.core.logging import get_logger
 
-logger = logging()
+logger = get_logger()
 
 
-async def startup_health_check(timeout: float) -> bool:
+async def startup_health_check(timeout: float = 180.0) -> bool:
     try:
         async with asyncio.timeout(timeout):
-            retry_interval = [1, 2, 5, 10, 15]
+            retry_intervals = [1, 2, 5, 10, 15]
             start_time = time.time()
 
             while True:
                 is_healthy = await health_checker.wait_for_services()
                 if is_healthy:
-                    logger.info("Health check passed during startup.")
                     return True
-                elapsed_time = time.time() - start_time
-                if elapsed_time > timeout:
-                    logger.error(
-                        "Health check failed during startup: Timeout exceeded."
-                    )
+                elapsed = time.time() - start_time
+                if elapsed >= timeout:
+                    logger.error("Services failed health check during startup")
                     return False
-                wait_time = (
-                    retry_interval[min(len(retry_interval) - 1, int(elapsed_time / 10))]
-                    if retry_interval
-                    else 15
-                )
+                wait_time = retry_intervals[
+                    min(len(retry_intervals) - 1, int(elapsed / 10))
+                ]
                 logger.warning(
-                    f"Health check failed during startup. Retrying in {wait_time} seconds..."
+                    f"Services not healthy, waiting {wait_time}s before retry"
                 )
                 await asyncio.sleep(wait_time)
     except asyncio.TimeoutError:
-        logger.error("Health check failed during startup: Timeout exceeded.")
+        logger.error(f"Health check timed out after {timeout} seconds")
         return False
     except Exception as e:
-        logger.error(f"Health check failed during startup: {e}")
+        logger.error(f"Error during startup health check: {e}")
         return False
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        logger.info("Starting up application...")
         await init_db()
-        logger.info("Database initialized successfully.")
+        logger.info("Database initialized successfully")
+
         await health_checker.add_service("database", health_checker.check_database)
-        await health_checker.add_service("redis", health_checker.check_redis)
         await health_checker.add_service("celery", health_checker.check_celery)
-        if not await startup_health_check(timeout=60):
-            raise RuntimeError("Startup health check failed.")
-        logger.info("Startup health check initialized and healthy.")
+        await health_checker.add_service("redis", health_checker.check_redis)
+
+        if not await startup_health_check():
+            raise RuntimeError("Critical services failed to start")
+
+        logger.info("All services initialized and healthy")
         yield
     except Exception as e:
         logger.error(f"Application startup failed: {e}")
         await engine.dispose()
         await health_checker.cleanup()
-        logger.error(f"Application startup failed: {e}")
         raise
-
     finally:
-        logger.info("Shutting down application...")
+        logger.info("Shutting down")
         await engine.dispose()
         await health_checker.cleanup()
-        logger.info("Application shutdown complete.")
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description=settings.PROJECT_DESCRIPTION,
     docs_url=f"{settings.API_V1_STR}/docs",
-    redoc_url=f"{settings.API_V1_STR}/docs",
-    openapi_url=f"{settings.API_V1_STR}/openai.json",
+    redoc_url=f"{settings.API_V1_STR}/redoc",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
 
 
 @app.get("/health", response_model=dict)
-async def health():
+async def health_check():
     try:
         health_status = await health_checker.check_all_services()
+
         if health_status["status"] == ServiceStatus.HEALTHY:
             status_code = status.HTTP_200_OK
-            return health_status
         elif health_status["status"] == ServiceStatus.DEGRADED:
             status_code = status.HTTP_206_PARTIAL_CONTENT
-            return health_status
         else:
             status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return JSONResponse(content=health_status, status_code=status_code)
+
+        return JSONResponse(status_code=status_code, content=health_status)
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return JSONResponse(
-            content={"status": ServiceStatus.UNHEALTHY, "details": {"error": str(e)}},
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"status": ServiceStatus.UNHEALTHY, "error": str(e)},
         )
 
 

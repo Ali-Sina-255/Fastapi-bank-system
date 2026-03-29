@@ -4,7 +4,7 @@
 {% block footer %}
         
           If you have any questions, please contact us at
-          <a href="mailto:{{support_email}}"> {{support_email}}</a>
+         mailto:{{support_email}} {{support_email}}
         
           Thanks for using our services! &copy;{{site_name}} Team. All right
           reserved.

@@ -3,15 +3,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from backend.app.core.services.login_otp import send_login_otp_email # type: ignore
 from fastapi import HTTPException, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from backend.app.api.services.login_otp import send_login_otp_email
 from backend.app.auth.models import User
 from backend.app.auth.shema import AccountStatusSchema, UserCreateSchema
 from backend.app.auth.utils import (
-    generate_activation_token,
+    create_activation_token,
     generate_otp,
     generate_password_hash,
     generate_username,
@@ -151,12 +151,17 @@ class UserAuthService:
             await db.commit()
             await db.refresh(user)
 
-    async def create_user(self, user_data: UserCreateSchema, db: AsyncSession) -> User:
+    async def create_user(
+        self,
+        user_data: UserCreateSchema,
+        db: AsyncSession,
+    ) -> User:
         user_data_dict = user_data.model_dump(
             exclude={"confirm_password", "username", "is_active", "account_status"}
         )
 
         password = user_data_dict.pop("password")
+
         new_user = User(
             username=generate_username(),
             hashed_password=generate_password_hash(password),
@@ -168,76 +173,88 @@ class UserAuthService:
         db.add(new_user)
         await db.commit()
         await db.refresh(new_user)
-        activation_token = generate_activation_token(new_user.id)
+
+        activation_token = create_activation_token(new_user.id)
         try:
             await send_activation_email(new_user.email, activation_token)
-            logger.info(
-                f"Activation email sent to {new_user.email} for user ID {new_user.id}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Error sending activation email to {new_user.email}: {str(e)}"
-            )
+            logger.info(f"Activation email sent to {new_user.email}")
 
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send activation email. Please try again later.",
-            )
+        except Exception as e:
+            logger.error(f"Failed to send activation email to {new_user.email}: {e}")
+            raise
+
         return new_user
 
-    async def activate_user_account(self, token: str, db: AsyncSession) -> User:
+    async def activate_user_account(
+        self,
+        token: str,
+        session: AsyncSession,
+    ) -> User:
         try:
             payload = jwt.decode(
                 token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
             )
-            if payload.get("type") != "activation":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid activation token.",
-                )
-            user_id = uuid.UUID(payload.get("user_id"))
-            if not user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid activation token.",
-                )
 
-            user = await self.get_user_by_id(
-                user_id=user_id, db=db, include_inactive=True
-            )
+            if payload.get("type") != "activation":
+                raise ValueError("Invalid token type")
+
+            user_id = uuid.UUID(payload["id"])
+
+            user = await self.get_user_by_id(user_id, session, include_inactive=True)
+
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found.",
+                    detail={
+                        "status": "error",
+                        "message": "User not found",
+                    },
                 )
             if user.is_active:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Account is already activated",
+                    detail={
+                        "status": "error",
+                        "message": "User already activated",
+                    },
                 )
-            await self.reset_user_state(
-                user=user, db=db, clear_otp=True, log_action=False
-            )
+            await self.reset_user_state(user, session, clear_otp=True, log_action=True)
+
             user.is_active = True
             user.account_status = AccountStatusSchema.ACTIVE
-            await db.commit()
-            await db.refresh(user)
+
+            await session.commit()
+            await session.refresh(user)
+
             return user
 
         except jwt.ExpiredSignatureError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Activation token has expired.",
+                detail={
+                    "status": "error",
+                    "message": "Activation token expired",
+                },
             )
         except jwt.InvalidTokenError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid activation token.",
+                detail={
+                    "status": "error",
+                    "message": "Invalid activation token",
+                },
             )
+        except HTTPException as http_ex:
+            raise http_ex
+        except Exception as e:
+            logger.error(f"Failed to activate user account: {e}")
+            raise
 
-    async def verify_login_otp(self, db: AsyncSession, email: str, otp: str) -> User:  # Changed return type to User
+    async def verify_login_otp(
+        self, db: AsyncSession, email: str, otp: str
+    ) -> User:  # Changed return type to User
         try:
-            user = await self.get_user_by_email(email=email, db=db)  
+            user = await self.get_user_by_email(email=email, db=db)
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -245,7 +262,7 @@ class UserAuthService:
                 )
 
             await self.validate_user_status(user)
-            await self.check_user_lockout(user, db) 
+            await self.check_user_lockout(user, db)
 
             if not user.otp or user.otp != otp:
                 await self.increment_failed_login_attempts(user, db)
@@ -254,19 +271,21 @@ class UserAuthService:
                     detail="Invalid OTP. Please try again.",
                 )
 
-            if user.otp_expiry_time is None or user.otp_expiry_time < datetime.now(timezone.utc):
+            if user.otp_expiry_time is None or user.otp_expiry_time < datetime.now(
+                timezone.utc
+            ):
                 await self.increment_failed_login_attempts(user, db)
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={
                         "message": "OTP has expired. Please request a new OTP.",
                         "status": "error",
-                        "action": "please request a new OTP"
+                        "action": "please request a new OTP",
                     },
                 )
 
             await self.reset_user_state(user, db, clear_otp=False, log_action=True)
-            return user  
+            return user
 
         except HTTPException as e:
             logger.warning(f"OTP verification failed for {email}: {e.detail}")
@@ -274,36 +293,48 @@ class UserAuthService:
 
     async def check_user_lockout(self, user: User, db: AsyncSession) -> None:
         if user.account_status != AccountStatusSchema.LOCKED:
-            return 
+            return
         if user.last_failed_login is None:
-            return 
-        
-        lockout_time = user.last_failed_login + timedelta(minutes=settings.LOCKOUT_DURATION_MINUTES)
+            return
+
+        lockout_time = user.last_failed_login + timedelta(
+            minutes=settings.LOCKOUT_DURATION_MINUTES
+        )
         current_time = datetime.now(timezone.utc)
-        
+
         if current_time >= lockout_time:
             await self.reset_user_state(user, db, clear_otp=False)
-            logger.info(f"Lockout duration expired, resetting failed login attempts and unlocking account for user {user.email}")
+            logger.info(
+                f"Lockout duration expired, resetting failed login attempts and unlocking account for user {user.email}"
+            )
             return  # ✅ Exit without raising exception
-        
+
         remaining_lockout_time = (lockout_time - current_time).total_seconds() / 60
-        logger.info(f"Account is locked for user {user.email}. Remaining lockout time: {remaining_lockout_time:.1f} minutes")
+        logger.info(
+            f"Account is locked for user {user.email}. Remaining lockout time: {remaining_lockout_time:.1f} minutes"
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "message": f"Account is locked due to multiple failed login attempts. Please try again after {remaining_lockout_time:.1f} minutes.",
                 "status": "error",
-                "action": f"please try again after {remaining_lockout_time:.1f} minutes"        
+                "action": f"please try again after {remaining_lockout_time:.1f} minutes",
             },
-    )
-    async def increment_failed_login_attempts(self, user: User, db: AsyncSession) -> None:
+        )
+
+    async def increment_failed_login_attempts(
+        self, user: User, db: AsyncSession
+    ) -> None:
         user.failed_login_attempts += 1
         user.last_failed_login = datetime.now(timezone.utc)
         if user.failed_login_attempts >= settings.LOGIN_ATTEMPTS:
             user.account_status = AccountStatusSchema.LOCKED
-            logger.warning(f"User {user.email} account locked due to {user.failed_login_attempts} failed login attempts.")
-            
+            logger.warning(
+                f"User {user.email} account locked due to {user.failed_login_attempts} failed login attempts."
+            )
+
         await db.commit()
         await db.refresh(user)
+
 
 user_auth_service = UserAuthService()

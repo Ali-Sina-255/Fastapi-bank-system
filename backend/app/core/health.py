@@ -21,13 +21,14 @@ class ServiceStatus(str, Enum):
 
 
 class HealthCheck:
-    def __init__(self) -> None:
+
+    def __init__(self):
         self._services: Dict[str, ServiceStatus] = {}
         self._check_functions: Dict[str, Callable[[], Awaitable[bool]]] = {}
         self._last_check: Dict[str, datetime] = {}
         self._timeouts: Dict[str, float] = {}
         self._retry_delays: Dict[str, float] = {}
-        self._max_retry: Dict[str, int] = {}
+        self._max_retries: Dict[str, int] = {}
         self._lock = asyncio.Lock()
         self._dependencies: Dict[str, set[str]] = {}
 
@@ -35,17 +36,16 @@ class HealthCheck:
         self._cached_status: Optional[Dict[str, Any]] = None
         self._last_check_time: Optional[datetime] = None
 
-    async def validated_dependencies(
+    async def validate_dependencies(
         self, service_name: str, depends_on: list[str]
     ) -> None:
-
         if not depends_on:
             return
 
         for dep in depends_on:
             if dep not in self._services:
                 raise ValueError(
-                    f"Dependency '{dep}' not registered for service '{service_name}' "
+                    f"Dependency '{dep}' not registered for service '{service_name}'"
                 )
 
     async def add_service(
@@ -54,36 +54,35 @@ class HealthCheck:
         check_function: Callable[[], Awaitable[bool]],
         timeout: float = 5.0,
         retry_delay: float = 1.0,
-        max_retry: int = 3,
+        max_retries: int = 3,
         depends_on: list[str] | None = None,
     ) -> None:
         self._services[service_name] = ServiceStatus.STARTING
         self._check_functions[service_name] = check_function
         self._timeouts[service_name] = timeout
         self._retry_delays[service_name] = retry_delay
-        self._max_retry[service_name] = max_retry
+        self._max_retries[service_name] = max_retries
         self._last_check[service_name] = datetime.now(timezone.utc)
 
         if depends_on:
-            await self.validated_dependencies(service_name, depends_on)
+            await self.validate_dependencies(service_name, depends_on)
             self._dependencies[service_name] = set(depends_on)
             logger.info(
-                f"Service '{service_name}' is registered with dependencies: {depends_on}"
+                f"Service '{service_name}' registered with dependencies: {depends_on}"
             )
 
     async def check_database(self) -> bool:
         try:
-            # TODO: load modes
+            # TODO: load models
             # TODO: add logger info
-
             async with async_session() as session:
                 await session.execute(text("SELECT 1"))
                 await session.commit()
+
                 self._last_check["database"] = datetime.now(timezone.utc)
                 return True
-
         except Exception as e:
-            logger.error(f"Database health Check is failed :{e}")
+            logger.error(f"Database health check failed: {e}")
             return False
 
     async def check_redis(self) -> bool:
@@ -99,14 +98,13 @@ class HealthCheck:
     async def check_celery(self) -> bool:
         try:
             inspect = celery_app.control.inspect()
-            active_workers = inspect.ping()
-            if not active_workers:
+            workers = inspect.ping()
+
+            if not workers:
                 conn = celery_app.connection()
                 try:
                     conn.ensure_connection(max_retries=3)
-                    logger.warning(
-                        "No celery workers found . but rabbitmq connection is healthy."
-                    )
+                    logger.warning("No celery workers found, but Rabbitmq is reachable")
                     self._last_check["celery"] = datetime.now(timezone.utc)
                     return True
                 finally:
@@ -121,83 +119,81 @@ class HealthCheck:
     async def check_service_health(
         self, service_name: str, max_retries: int = 3
     ) -> ServiceStatus:
-        if service_name not in self._dependencies:
+        if service_name in self._dependencies:
             for dep in self._dependencies[service_name]:
                 dep_status = await self.check_service_health(dep)
+
                 if dep_status != ServiceStatus.HEALTHY:
                     logger.error(
-                        f"Service '{service_name}' is degraded due to unhealthy dependency '{dep}'"
+                        f"Dependency {dep} not healthy for service {service_name}"
                     )
                     return ServiceStatus.DEGRADED
-            raise ValueError(f"Service '{service_name}' is not registered")
 
-        if service_name in self._check_functions:
-            raise ValueError(f"Service '{service_name}' does not have a check function")
-        check_function = self._check_functions[service_name]
+        if service_name not in self._check_functions:
+            raise ValueError(f"Unknown service: {service_name}")
+        check_func = self._check_functions[service_name]
         timeout = self._timeouts.get(service_name, 5.0)
-        max_retries = self._max_retry[service_name]
+        max_retries = self._max_retries[service_name]
         retry_delay = self._retry_delays[service_name]
 
         metrics = {"attempts": 0, "total_delay": 0.0, "last_error": None}
 
         for attempt in range(max_retries):
-            metrics["attempts"] = attempt + 1
+            metrics["attempts"] += 1
             try:
                 async with asyncio.timeout(timeout):
-                    is_healthy = await check_function()
+                    is_healthy = await check_func()
+
                     if is_healthy:
                         async with self._lock:
                             self._services[service_name] = ServiceStatus.HEALTHY
-                            self._last_check[service_name] = datetime.now(timezone.utc)
+                            self._last_check[service_name] = datetime.now()
+
                             if attempt > 0:
                                 logger.info(
-                                    f"Service '{service_name}' is now healthy after {attempt + 1} attempts and {metrics['total_delay']} seconds of delay"
+                                    f"Service {service_name} recovered after {metrics['attempts']} attempts"
                                 )
                         return ServiceStatus.HEALTHY
+
                     async with self._lock:
                         self._services[service_name] = ServiceStatus.DEGRADED
-                        metrics["last_error"] = (
-                            f"Check function returned False on attempt {attempt + 1}"
-                        )
 
             except asyncio.TimeoutError:
-                self._services[service_name] = ServiceStatus.UNHEALTHY
+                metrics["last_error"] = f"Timout after {timeout}s"
                 if attempt == max_retries - 1:
-                    logger.error(
-                        f"Health check for service '{service_name}' failed after {max_retries} attempts due to timeout."
+                    logger.warning(
+                        f"Health check timeout for {service_name} after all retries"
                     )
-                metrics["last_error"] = (
-                    f"Check function timed out on attempt {attempt + 1}"
-                )
-
             except Exception as e:
-                self._services[service_name] = ServiceStatus.UNHEALTHY
                 metrics["last_error"] = str(e)
                 if attempt == max_retries - 1:
-                    logger.error(
-                        f"Health check for service '{service_name}' failed after {max_retries} attempts due to error: {e}"
-                    )
+                    logger.error(f"Health check failed for {service_name}: {e}")
+
             metrics["total_delay"] += retry_delay
             await asyncio.sleep(retry_delay)
+
         async with self._lock:
             self._services[service_name] = ServiceStatus.UNHEALTHY
             logger.error(
-                f"Health check for service '{service_name}' failed after {max_retries} attempts due to error: {metrics['last_error']}"
+                f"Service {service_name} unhealthy after {max_retries} attempts: {metrics['last_error']}"
             )
+
         return ServiceStatus.UNHEALTHY
 
-    async def check_all_services(self) -> Dict[str, ServiceStatus]:
+    async def check_all_services(self) -> Dict[str, Any]:
         current_time = datetime.now(timezone.utc)
         if (
             self._cached_status is not None
             and self._last_check_time is not None
-            and current_time - self._last_check_time < self._cache_duration
+            and (current_time - self._last_check_time) < self._cache_duration
         ):
             return self._cached_status
+
         async with self._lock:
             services = list(self._services.keys())
         tasks = [self.check_service_health(service) for service in services]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+
         health_status = {
             "status": ServiceStatus.HEALTHY,
             "timestamp": current_time.isoformat(),
@@ -209,40 +205,33 @@ class HealthCheck:
                 health_status["services"][service] = {
                     "status": ServiceStatus.UNHEALTHY,
                     "error": str(result),
-                    "last_checked": self._last_check[service].isoformat(),
+                    "last_check": self._last_check[service].isoformat(),
                 }
                 health_status["status"] = ServiceStatus.DEGRADED
             else:
                 health_status["services"][service] = {
                     "status": result,
-                    "last_checked": self._last_check[service].isoformat(),
+                    "last_check": self._last_check[service].isoformat(),
                 }
                 if result != ServiceStatus.HEALTHY:
                     health_status["status"] = ServiceStatus.DEGRADED
-
         self._cached_status = health_status
         self._last_check_time = current_time
+
         return health_status
 
-    async def wait_for_services(self, timeout: float = 60.0) -> bool:
+    async def wait_for_services(self, timeout: float = 30.0) -> bool:
         try:
-            start_time = datetime.now(timezone.utc)
-            while (datetime.now(timezone.utc) - start_time) < timedelta(
-                seconds=timeout
-            ):
-
-                health_status = await self.check_all_services()
-                if health_status["status"] == ServiceStatus.HEALTHY:
-                    logger.info("All services are healthy.")
+            start_time = datetime.now()
+            while (datetime.now() - start_time) < timedelta(seconds=timeout):
+                status = await self.check_all_services()
+                if status["status"] == ServiceStatus.HEALTHY:
                     return True
-                await asyncio.sleep(5)
-
+                await asyncio.sleep(1)
+            return False
         except Exception as e:
-            logger.error(f"Error while waiting for services to become healthy: {e}")
-        logger.error(
-            f"Timeout while waiting for services to become healthy after {timeout} seconds."
-        )
-        return False
+            logger.error(f"Error waiting for services: {e}")
+            return False
 
     async def cleanup(self) -> None:
         async with self._lock:
@@ -251,10 +240,7 @@ class HealthCheck:
             self._last_check.clear()
             self._timeouts.clear()
             self._retry_delays.clear()
-            self._max_retry.clear()
-            self._dependencies.clear()
-            self._cached_status = None
-            self._last_check_time = None
+            self._max_retries.clear()
 
 
 health_checker = HealthCheck()

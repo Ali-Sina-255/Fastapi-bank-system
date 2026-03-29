@@ -8,14 +8,14 @@ class ActivationEmail(EmailTemplate):
     template_name_plain = "activation_email.txt"
 
 
-async def send_activation_email(email: str, activation_link: str) -> None:
+async def send_activation_email(email: str, token: str) -> None:
     activation_url = (
-        f"{settings.API_BASE_URL}{settings.API_V1_STR}/auth/activate/{{token}}"
+        f"{settings.API_BASE_URL}{settings.API_V1_STR}/auth/activate/{token}"
     )
     context = {
         "activation_url": activation_url,
-        "support_email": settings.SUPPORT_EMAIL,
-        "expire_time": settings.ACTIVATION_TOKEN_EXPIRATION_MINUTES,
+        "expiry_time": settings.ACTIVATION_TOKEN_EXPIRATION_MINUTES,
         "site_name": settings.SITE_NAME,
+        "support_email": settings.SUPPORT_EMAIL,
     }
     await ActivationEmail.send_email(email_to=email, context=context)
