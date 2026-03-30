@@ -7,7 +7,6 @@ from fastapi import HTTPException, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.api.services.login_otp import send_login_otp_email
 from backend.app.auth.models import User
 from backend.app.auth.shema import AccountStatusSchema, UserCreateSchema
 from backend.app.auth.utils import (
@@ -19,7 +18,9 @@ from backend.app.auth.utils import (
 )
 from backend.app.core.config import settings
 from backend.app.core.logging import get_logger
+from backend.app.core.services.account_lockout import send_account_lockout_email
 from backend.app.core.services.activation_email import send_activation_email
+from backend.app.core.services.login_otp import send_login_otp_email
 
 logger = get_logger()
 
@@ -344,18 +345,33 @@ class UserAuthService:
         )
 
     async def increment_failed_login_attempts(
-        self, user: User, db: AsyncSession
+        self,
+        user: User,
+        session: AsyncSession,
     ) -> None:
         user.failed_login_attempts += 1
-        user.last_failed_login = datetime.now(timezone.utc)
+
+        current_time = datetime.now(timezone.utc)
+        user.last_failed_login = current_time
+
         if user.failed_login_attempts >= settings.LOGIN_ATTEMPTS:
             user.account_status = AccountStatusSchema.LOCKED
+
+            try:
+                await send_account_lockout_email(user.email, current_time)
+                logger.info(f"Account lockout notification email sent to {user.email}")
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to send account lockout email to {user.email}: {e}"
+                )
             logger.warning(
-                f"User {user.email} account locked due to {user.failed_login_attempts} failed login attempts."
+                f"User {user.email} has been locked out due to too many failed login attempts"
             )
+        await session.commit()
 
-        await db.commit()
-        await db.refresh(user)
+        await session.refresh(user)
 
 
+user_auth_service = UserAuthService()
 user_auth_service = UserAuthService()
