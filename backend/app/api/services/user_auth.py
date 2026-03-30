@@ -108,48 +108,49 @@ class UserAuthService:
                 detail="Account is inactive. Please activate your account to proceed.",
             )
 
-    async def generate_and_save_otp(self, user: User, db: AsyncSession) -> tuple[bool, str]:  # type: ignore
+    async def generate_and_save_otp(
+        self,
+        user: User,
+        session: AsyncSession,
+    ) -> tuple[bool, str]:
         try:
-
             otp = generate_otp()
             user.otp = otp
+
             user.otp_expiry_time = datetime.now(timezone.utc) + timedelta(
                 minutes=settings.OTP_EXPIRATION_MINUTES
             )
-            await db.commit()
-            await db.refresh(user)
-            # return True, otp
+
+            await session.commit()
+            await session.refresh(user)
 
             for attempt in range(3):
                 try:
                     await send_login_otp_email(user.email, otp)
-                    logger.info(
-                        f"Login OTP email sent to {user.email} for user ID {user.id}"
-                    )
+                    logger.info(f"OTP sent to {user.email} successfully")
                     return True, otp
-
                 except Exception as e:
                     logger.error(
-                        f"Error sending login OTP email to {user.email} (attempt {attempt + 1}): {str(e)}"
+                        f"Failed to send OTP email (attempt {attempt + 1}): {e}"
                     )
                     if attempt == 2:
                         user.otp = ""
                         user.otp_expiry_time = None
-                        await db.commit()
-                        await db.refresh(user)
-                        return (
-                            False,
-                            "Failed to send OTP email after multiple attempts. Please try again later.",
-                        )
-                await asyncio.sleep(2**attempt)
+                        await session.commit()
+                        await session.refresh(user)
+                        return False, ""
+
+                    await asyncio.sleep(2**attempt)
             return False, ""
+
         except Exception as e:
-            logger.error(f"Error generating OTP for user {user.email}: {str(e)}")
+            logger.error(f"Failed to generate and save OTP: {e}")
 
             user.otp = ""
             user.otp_expiry_time = None
-            await db.commit()
-            await db.refresh(user)
+            await session.commit()
+            await session.refresh(user)
+            return False, ""
 
     async def create_user(
         self,
@@ -251,45 +252,65 @@ class UserAuthService:
             raise
 
     async def verify_login_otp(
-        self, db: AsyncSession, email: str, otp: str
-    ) -> User:  # Changed return type to User
+        self,
+        email: str,
+        otp: str,
+        session: AsyncSession,
+    ) -> User:
         try:
-            user = await self.get_user_by_email(email=email, db=db)
+            user = await self.get_user_by_email(email, session)
             if not user:
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found.",
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "status": "error",
+                        "message": "Invalid credentials",
+                    },
                 )
 
             await self.validate_user_status(user)
-            await self.check_user_lockout(user, db)
+
+            await self.check_user_lockout(user, session)
 
             if not user.otp or user.otp != otp:
-                await self.increment_failed_login_attempts(user, db)
+                await self.increment_failed_login_attempts(user, session)
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid OTP. Please try again.",
+                    detail={
+                        "status": "error",
+                        "message": "Invalid OTP",
+                        "action": "Please check your OTP and try again",
+                    },
                 )
 
             if user.otp_expiry_time is None or user.otp_expiry_time < datetime.now(
                 timezone.utc
             ):
-                await self.increment_failed_login_attempts(user, db)
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={
-                        "message": "OTP has expired. Please request a new OTP.",
                         "status": "error",
-                        "action": "please request a new OTP",
+                        "message": "OTP has expired",
+                        "action": "Please request a new OTP",
                     },
                 )
 
-            await self.reset_user_state(user, db, clear_otp=False, log_action=True)
+            await self.reset_user_state(user, session, clear_otp=False)
+
             return user
 
-        except HTTPException as e:
-            logger.warning(f"OTP verification failed for {email}: {e.detail}")
-            raise
+        except HTTPException as http_ex:
+            raise http_ex
+        except Exception as e:
+            logger.error(f"Error during OTP verification: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "status": "error",
+                    "message": "Failed to verify OTP",
+                    "action": "Please try again later",
+                },
+            )
 
     async def check_user_lockout(self, user: User, db: AsyncSession) -> None:
         if user.account_status != AccountStatusSchema.LOCKED:

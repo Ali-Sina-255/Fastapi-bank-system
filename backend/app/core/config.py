@@ -136,4 +136,4 @@ class Setting(BaseSettings):
         )
 
 
-settings = Setting()
+settings = Setting()  # type: ignore

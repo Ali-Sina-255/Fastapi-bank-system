@@ -14,7 +14,8 @@ _ph = PasswordHasher()
 
 
 def generate_otp(length: int = 6) -> str:
-    return "".join(random.choices(string.digits, k=length))
+    otp = "".join(random.choices(string.digits, k=length))
+    return otp
 
 
 def generate_password_hash(password: str) -> str:

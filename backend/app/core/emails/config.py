@@ -11,11 +11,11 @@ email_config = ConnectionConfig(
     MAIL_FROM_NAME=settings.EMAIL_FROM_NAME,
     MAIL_PORT=settings.SMTP_PORT,
     MAIL_SERVER=settings.SMTP_HOST,
-    MAIL_USERNAME=settings.SMTP_USER or "",  # <-- never None
-    MAIL_PASSWORD=settings.SMTP_PASSWORD or "",  # <-- never None
+    MAIL_USERNAME=settings.SMTP_USER or "",
+    MAIL_PASSWORD=settings.SMTP_PASSWORD or "",
     MAIL_STARTTLS=settings.EMAIL_USE_TLS,
     MAIL_SSL_TLS=settings.EMAIL_USE_SSL,
-    USE_CREDENTIALS=False,  # Mailpit doesn’t need creds
+    USE_CREDENTIALS=False,
     VALIDATE_CERTS=False,
     TEMPLATE_FOLDER=TEMPLATES_DIR,
 )
