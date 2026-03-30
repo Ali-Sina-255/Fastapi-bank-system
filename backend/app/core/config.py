@@ -67,6 +67,21 @@ class Setting(BaseSettings):
     RABBITMQ_USER: str = "guest"
     RABBITMQ_PASSWORD: str = "guest"
 
+    # =========================================
+    #  JWT Cookies
+    # =========================================
+    JWT_ACCESS_TOKEN_EXPIRATION_MINUTES: int = 30 if ENVIRONMENT == "local" else 15
+    JWT_REFRESH_TOKEN_EXPIRATION_DAYS: int = 1
+    COOKIE_SECURE: bool = False if ENVIRONMENT == "local" else True
+    COOKIE_ACCESS_NAME: str = "access_token"
+    COOKIE_REFRESH_NAME: str = "refresh_token"
+    COOKIE_LOGGED_IN_NAME: str = "logged_in"
+
+    COOKIE_HTTP_ONLY: bool = True
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_PATH: str = "/"
+    SIGNING_KEY: str = ""
+
     @property
     def CELERY_BROKER_URL(self) -> str:
         return (
