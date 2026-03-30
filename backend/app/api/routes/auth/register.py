@@ -1,18 +1,13 @@
-from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.api.services.user_auth import user_auth_service
-from backend.app.auth.shema import UserCreateSchema, UserReadSchema
+from backend.app.auth.schema import UserCreateSchema, UserReadSchema
 from backend.app.core.db import get_session
 from backend.app.core.logging import get_logger
 
 logger = get_logger()
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-# ================= DB =================
-db_dependency = Annotated[AsyncSession, Depends(get_session)]
 
 
 @router.post(
@@ -21,7 +16,7 @@ db_dependency = Annotated[AsyncSession, Depends(get_session)]
     status_code=status.HTTP_201_CREATED,
 )
 async def register_user(
-    user_data: UserCreateSchema, session: db_dependency
+    user_data: UserCreateSchema, session: AsyncSession = Depends(get_session)
 ):
     try:
         if await user_auth_service.check_user_email_exists(user_data.email, session):

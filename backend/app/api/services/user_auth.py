@@ -8,7 +8,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.auth.models import User
-from backend.app.auth.shema import AccountStatusSchema, UserCreateSchema
+from backend.app.auth.schema import AccountStatusSchema, UserCreateSchema
 from backend.app.auth.utils import (
     create_activation_token,
     generate_otp,
@@ -413,5 +413,4 @@ class UserAuthService:
             raise
 
 
-user_auth_service = UserAuthService()
 user_auth_service = UserAuthService()

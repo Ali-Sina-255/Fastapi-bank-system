@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from backend.app.api.routes.auth import activate, login, register
+from backend.app.api.routes.auth import activate, login, password_reset, register
 
 from .routes import home
 
@@ -9,3 +9,4 @@ api_router.include_router(home.router)
 api_router.include_router(register.router)
 api_router.include_router(activate.router)
 api_router.include_router(login.router)
+api_router.include_router(password_reset.router)
