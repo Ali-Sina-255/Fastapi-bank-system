@@ -25,7 +25,7 @@ async def register_user(
                 detail="User with this email already exists",
             )
 
-        if await user_auth_service.check_user_id_no_exists(user_data.id_no, session):
+        if await user_auth_service.check_user_id_no_exists(user_data.id_no, session): # type: ignore
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User with this id number already exists",
