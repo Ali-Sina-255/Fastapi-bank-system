@@ -76,6 +76,7 @@ class Setting(BaseSettings):
     COOKIE_ACCESS_NAME: str = "access_token"
     COOKIE_REFRESH_NAME: str = "refresh_token"
     COOKIE_LOGGED_IN_NAME: str = "logged_in"
+    PASSWORD_RESET_TOKEN_EXPIRATION_MINUTES: int = 3 if ENVIRONMENT == "local" else 5
 
     COOKIE_HTTP_ONLY: bool = True
     COOKIE_SAMESITE: str = "lax"
